@@ -23,7 +23,7 @@ for block in resnet50.children():
     if isinstance(block, nn.Conv2d):
         fname = 'resnet/resnet50_' + str(i) + '.onnx'
         ops, params = measure_layer(block, dummy_input)
-        df.append([block.in_channels, block.out_channels, block.kernel_size,
+        df.append([fname,block.in_channels, block.out_channels, block.kernel_size,
                         block.stride, block.padding, block.bias, dummy_input.size()[2], dummy_input.size()[3], ops, params])
         torch.onnx.export(block, dummy_input, fname)
         i += 1

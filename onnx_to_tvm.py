@@ -2,18 +2,28 @@ import onnx
 import numpy as np
 import tvm
 import tvm.relay as relay
+import argparse
 
-onnx_model = onnx.load('resnet50sim.onnx')
+parser = argparse.ArgumentParser(description='AutoTVM from ONNX checkpoints')
+parser.add_argument('--cpu', action='store_true')
+args = parser.parse_args()
 
-num_class = 1000
-data = np.random.uniform(-1, 1, size=(1,3,224,224)).astype("float32")
+def get_network(filename, batch_size, in_channels, in_x, in_y):
+    onnx_model = onnx.load(filename)
+    data = np.random.uniform(-1, 1, size=(batch_size,in_channels,in_x,in_y)).astype("float32")
+    shape_dict = {'0' : data.shape}
+    sym, params = relay.frontend.from_onnx(onnx_model, shape_dict)
+    return sym, params, data
 
-target = tvm.target.cuda()
-ctx    = tvm.gpu()
+if args.cpu:
+    target = 'llvm'
+    ctx = tvm.cpu()
+else:
+    target = tvm.target.cuda()
+    ctx    = tvm.gpu()
 
-shape_dict = {'0' : data.shape}
-sym, params = relay.frontend.from_onnx(onnx_model, shape_dict)
 
+sym, params, data = get_network('resnet/resnet50_1.onnx', 1, 64, 56, 56)
 with relay.build_config(opt_level=1):
     intrp = relay.build_module.create_executor('graph',sym, ctx, target)
 
