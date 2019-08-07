@@ -1,8 +1,14 @@
+import os
 import onnx
 import numpy as np
 import tvm
 import tvm.relay as relay
 import argparse
+import pandas as pd
+from tvm import autotvm
+from tvm.autotvm.tuner import XGBTuner, GATuner, RandomTuner, GridSearchTuner
+from tvm.contrib.util import tempdir
+import tvm.contrib.graph_runtime as runtime
 
 parser = argparse.ArgumentParser(description='AutoTVM from ONNX checkpoints')
 parser.add_argument('--cpu', action='store_true')
@@ -14,7 +20,9 @@ def get_network(filename, batch_size, in_channels, in_x, in_y):
     data = np.random.uniform(-1, 1, size=(batch_size,in_channels,in_x,in_y)).astype("float32")
     shape_dict = {'0' : data.shape}
     sym, params = relay.frontend.from_onnx(onnx_model, shape_dict)
-    return sym, params, data
+
+    input_shape  = data.shape
+    return sym, params, input_shape
 
 if args.cpu:
     target = 'llvm'
@@ -38,13 +46,13 @@ def execute_local():
 target = tvm.target.cuda()
 
 #### TUNING OPTION ####
-network = 'resnet50_1'
+network = 'resnet50'
 log_file = "logs/%s.log" % network
 dtype = 'float32'
 
 tuning_option = {
-    'log_filename': log_file,,
-    'n_trial': args.n_trial,
+    'log_filename': log_file,
+    'n_trial': args.n_trials,
 
     'measure_option': autotvm.measure_option(
         builder=autotvm.LocalBuilder(timeout=10),
@@ -91,41 +99,55 @@ def tune_tasks(tasks,
     os.remove(tmp_log_file)
 
 def tune_and_evaluate(tuning_opt):
-    # extract workloads from relay program
-    print("Extract tasks...")
-    net, params, input_shape, out_shape = get_network(network, batch_size=1)
-    tasks = autotvm.task.extract_from_program(net, target=target,
-                                            params=params, ops=(relay.op.nn.conv2d,))
 
-    # run tuning tasks
-    print("Tuning...")
-    tune_tasks(tasks, **tuning_opt)
+    num_layers = 49
+    df = pd.read_csv('resnet/layer_info.csv')
 
-    # compile kernels with history best records
-    with autotvm.apply_history_best(log_file):
-        print("Compile...")
-        with relay.build_config(opt_level=3):
-            graph, lib, params = relay.build_module.build(
-                net, target=target, params=params)
+    for layer in range(num_layers):
+        net_fname = 'resnet/' + network + '_' + str(layer) + '.onnx'
 
-        # export library
-        tmp = tempdir()
-        filename = "net.tar"
-        lib.export_library(tmp.relpath(filename))
+        in_c  = int(df.loc[df.filename==net_fname, 'in_channels'])
+        in_x  = int(df.loc[df.filename==net_fname, 'input_spatial_x'])
 
-        # load parameters
-        ctx = tvm.context(str(target), 0)
-        module = runtime.create(graph, lib, ctx)
-        data_tvm = tvm.nd.array((np.random.uniform(size=input_shape)).astype(dtype))
-        module.set_input('data', data_tvm)
-        module.set_input(**params)
+        out_c = int(df.loc[df.filename==net_fname, 'out_channels'])
+        #out_x  = int(df.loc[df.filename==net_fname, 'out_spatial_x'])
+        #out_shape = (1, out_c, out_x, out_x)
 
-        # evaluate
-        print("Evaluate inference time cost...")
-        ftimer = module.module.time_evaluator("run", ctx, number=1, repeat=600)
-        prof_res = np.array(ftimer().results) * 1000  # convert to millisecond
-        print("Mean inference time (std dev): %.2f ms (%.2f ms)" %
-              (np.mean(prof_res), np.std(prof_res)))
+        # extract workloads from relay program
+        print("Extract tasks...")
+        net, params, input_shape = get_network(net_fname, 1, in_c, in_x, in_x)
+        tasks = autotvm.task.extract_from_program(net, target=target,
+                                                params=params, ops=(relay.op.nn.conv2d,))
+
+        # run tuning tasks
+        print("Tuning...")
+        tune_tasks(tasks, **tuning_opt)
+
+        # compile kernels with history best records
+        with autotvm.apply_history_best(log_file):
+            print("Compile...")
+            with relay.build_config(opt_level=3):
+                graph, lib, params = relay.build_module.build(
+                    net, target=target, params=params)
+
+            # export library
+            tmp      = tempdir()
+            filename = "net.tar"
+            lib.export_library(tmp.relpath(filename))
+
+            # load parameters
+            ctx      = tvm.context(str(target), 0)
+            module   = runtime.create(graph, lib, ctx)
+            data_tvm = tvm.nd.array((np.random.uniform(size=input_shape)).astype(dtype))
+            module.set_input('data', data_tvm)
+            module.set_input(**params)
+
+            # evaluate
+            print("Evaluate inference time cost...")
+            ftimer   = module.module.time_evaluator("run", ctx, number=1, repeat=600)
+            prof_res = np.array(ftimer().results) * 1000  # convert to millisecond
+            print("Mean inference time (std dev): %.2f ms (%.2f ms)" %
+                  (np.mean(prof_res), np.std(prof_res)))
 
 # We do not run the tuning in our webpage server since it takes too long.
 # Uncomment the following line to run it by yourself.
