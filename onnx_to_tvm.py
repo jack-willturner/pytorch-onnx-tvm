@@ -23,17 +23,7 @@ def get_network(filename, batch_size, in_channels, in_x, in_y):
     shape_dict = {'0' : data.shape}
     sym, params = relay.frontend.from_onnx(onnx_model, shape_dict)
 
-    target = tvm.target.cuda()
-    input_shape  = data.shape
-
-    # test the model we loaded
-    with relay.build_config(opt_level=1):
-        intrp = relay.build_module.create_executor('graph', sym, tvm.gpu(), target)
-
-    dtype = 'float32'
-    tvm_output = intrp.evaluate(sym)(tvm.nd.array(data.astype(dtype)), **params).asnumpy()
-
-    return sym, params, input_shape
+    return sym, params
 
 if args.cpu:
     target = 'llvm'
@@ -42,9 +32,6 @@ else:
     target = tvm.target.cuda()
     ctx    = tvm.gpu()
 
-
-#### DEVICE CONFIG ####
-target = tvm.target.cuda()
 
 #### TUNING OPTION ####
 network = 'resnet50'
@@ -104,16 +91,12 @@ def tune_and_evaluate(tuning_opt):
 
         in_c  = int(df.loc[df.filename==net_fname, 'in_channels'])
         in_x  = int(df.loc[df.filename==net_fname, 'input_spatial_x'])
-
         out_c = int(df.loc[df.filename==net_fname, 'out_channels'])
-        #out_x  = int(df.loc[df.filename==net_fname, 'out_spatial_x'])
-        #out_shape = (1, out_c, out_x, out_x)
 
         # extract workloads from relay program
         print("Extract tasks...")
-        net, params, input_shape = get_network(net_fname, 1, in_c, in_x, in_x)
-        tasks = autotvm.task.extract_from_program(net, target=target,
-                                                params=params, ops=(relay.op.nn.conv2d,))
+        net, params = get_network(net_fname, 1, in_c, in_x, in_x)
+        tasks = autotvm.task.extract_from_program(net['main'], target=target, params=params, ops=(relay.op.nn.conv2d,))
 
         # run tuning tasks
         print("Tuning...")
