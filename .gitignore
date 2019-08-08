@@ -1,3 +1,5 @@
 resnet/*.onnx
 __pycache__/
 models/__pycache__/
+logs/
+.ipynb_checkpoints/

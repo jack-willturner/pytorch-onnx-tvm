@@ -15,13 +15,24 @@ parser.add_argument('--cpu', action='store_true')
 parser.add_argument('--n_trials', default=1000, type=int)
 args = parser.parse_args()
 
+os.environ["CUDA_VISIBLE_DEVICES"]='1'
+
 def get_network(filename, batch_size, in_channels, in_x, in_y):
     onnx_model = onnx.load(filename)
     data = np.random.uniform(-1, 1, size=(batch_size,in_channels,in_x,in_y)).astype("float32")
     shape_dict = {'0' : data.shape}
     sym, params = relay.frontend.from_onnx(onnx_model, shape_dict)
 
+    target = tvm.target.cuda()
     input_shape  = data.shape
+
+    # test the model we loaded
+    with relay.build_config(opt_level=1):
+        intrp = relay.build_module.create_executor('graph', sym, tvm.gpu(), target)
+
+    dtype = 'float32'
+    tvm_output = intrp.evaluate(sym)(tvm.nd.array(data.astype(dtype)), **params).asnumpy()
+
     return sym, params, input_shape
 
 if args.cpu:
@@ -30,16 +41,6 @@ if args.cpu:
 else:
     target = tvm.target.cuda()
     ctx    = tvm.gpu()
-
-
-def execute_local():
-    sym, params, data = get_network('resnet/resnet50_1.onnx', 1, 64, 56, 56)
-    with relay.build_config(opt_level=1):
-        intrp = relay.build_module.create_executor('graph',sym, ctx, target)
-
-    tvm_output = intrp.evaluate(sym)(tvm.nd.array(data.astype("float32")), **params).asnumpy()
-
-    print(tvm_output)
 
 
 #### DEVICE CONFIG ####
@@ -69,8 +70,7 @@ def tune_tasks(tasks,
                tuner='xgb',
                n_trial=1000,
                early_stopping=None,
-               log_filename='tuning.log',
-               use_transfer_learning=True):
+               log_filename='tuning.log'):
 
     # create tmp log file
     tmp_log_file = log_filename + ".tmp"
@@ -81,10 +81,6 @@ def tune_tasks(tasks,
         prefix = "[Task %2d/%2d] " %(i+1, len(tasks))
 
         tuner_obj = XGBTuner(tsk, loss_type='rank')
-
-        if use_transfer_learning:
-            if os.path.isfile(tmp_log_file):
-                tuner_obj.load_history(autotvm.record.load_from_file(tmp_log_file))
 
         # do tuning
         tuner_obj.tune(n_trial=min(n_trial, len(tsk.config_space)),
@@ -149,7 +145,5 @@ def tune_and_evaluate(tuning_opt):
             print("Mean inference time (std dev): %.2f ms (%.2f ms)" %
                   (np.mean(prof_res), np.std(prof_res)))
 
-# We do not run the tuning in our webpage server since it takes too long.
-# Uncomment the following line to run it by yourself.
 
 tune_and_evaluate(tuning_option)
