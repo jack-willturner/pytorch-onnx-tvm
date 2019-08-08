@@ -1,5 +1,5 @@
 # pytorch-onnx-tvm
-PyTorch -> ONNX -> TVM for autotuning
+Want to see how well TVM can optimise your neural network (or some subsection of your neural network) for different bits of hardware but have it specified in PyTorch? This project exports your PyTorch models to ONNX and imports them to TVM for autotuning.
 
 ## Generate ONNX files
 
