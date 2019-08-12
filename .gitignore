@@ -4,3 +4,4 @@ models/__pycache__/
 logs/
 .ipynb_checkpoints/
 .pkl_momoize_py3
+vgg/*.onnx
