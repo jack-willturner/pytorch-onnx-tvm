@@ -17,6 +17,7 @@ parser.add_argument('--device_key', default='1080ti',  type=str)
 parser.add_argument('--opencl', action='store_true')
 parser.add_argument('--cpu', action='store_true')
 parser.add_argument('--n_trials', default=1000, type=int)
+parser.add_argument('--drop_until', default=0, type=int)
 args = parser.parse_args()
 
 if not args.opencl:
@@ -74,6 +75,8 @@ def tune_tasks(tasks,
 
 def tune_and_evaluate():
     df = pd.read_csv(args.layer_info)
+    if args.drop_until > 0:
+        df = df.drop(list(range(args.drop_until)))
 
     filenames = df.filename
 
