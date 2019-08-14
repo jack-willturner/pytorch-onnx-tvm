@@ -13,23 +13,22 @@ This will also export a `csv` file containing information about the input/output
 
 ## Autotune individual layers
 
-### Nvidia GPU
+You first need to set up a tracker (this is your host machine), which will coordinate the autotuning experiments on your target devices.
 
 On the host:
 ```bash
 python -m tvm.exec.rpc_tracker --host=0.0.0.0 --port=9190
 ```
 
-On each device run:
+Then on each target device, run:
 ```bash
-python -m tvm.exec.rpc_server --tracker=0.0.0.0:9190 --key=1080ti
+python -m tvm.exec.rpc_server --tracker=[HOST-IP]:9190 --key=[DEVICE-KEY]
 ```
 
-Then begin tuning:
+Where `DEVICE-KEY` is a name you have assigned to the target device; you can then address specific target devices when you start tuning. For example, here is how you would tune layer 5 of ResNet-50 on a HiKey board using the GPU:
 
 ```bash
-python onnx_to_tvm.py
+python onnx_to_tvm.py --model='resnet50' --layer_info='resnet/layer_info.csv' --layer='resnet/resnet50_0.onnx' --device_key='hikey' --opencl --n_trials=1000
 ```
 
-### ARM GPU
-Notes coming soon...  
+To use an Nvidia GPU, omit the `--opencl` flag. 
