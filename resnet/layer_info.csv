@@ -1,5 +1,5 @@
 ,filename,in_channels,out_channels,kernel_size,stride,padding,bias,input_spatial_x,input_spatial_y,ops,params
-0,resnet/resnet50_0.onnx,3,64,"(7, 7)","(2, 2)","(3, 3)",,224,224,118013952.0,9408
+0,resnet/resnet50_0.onnx,3,64,"(7, 7)","(2, 2)","(3, 3)",False,224,224,118013952.0,9408
 1,resnet/resnet50_1.onnx,64,64,"(1, 1)","(1, 1)","(0, 0)",,56,56,12845056.0,4096
 2,resnet/resnet50_2.onnx,64,64,"(3, 3)","(1, 1)","(1, 1)",,56,56,115605504.0,36864
 3,resnet/resnet50_3.onnx,64,256,"(1, 1)","(1, 1)","(0, 0)",,56,56,51380224.0,16384

@@ -14,7 +14,7 @@ dummy_input = torch.randn(1,3,224,224)
 if args.model == 'resnet50':
     net = resnet50()
     base_file = 'resnet/resnet50'
-    save_folder = ['resnet']
+    save_folder = 'resnet'
 elif args.model == 'vgg16':
     net = vgg16()
     base_file = 'vgg/vgg16'
@@ -69,6 +69,9 @@ for block in net.children():
                             int(layer.conv3_input_size[3]), ops, params])
             torch.onnx.export(layer.conv3,dummy_input, fname)
             i += 1
+
+    elif isinstance(block, nn.MaxPool2d) or isinstance(block, nn.AdaptiveAvgPool2d):
+        dummy_input = block(dummy_input)
 
     elif isinstance(block, nn.Linear):
         fname = base_file + '_l_' + str(i) + '.onnx'
