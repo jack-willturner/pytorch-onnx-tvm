@@ -6,7 +6,7 @@ Want to see how well TVM can optimise your neural network (or some subsection of
 You can generate individual `ONNX` files for each layer of a ResNet by running:
 
 ```bash
-python resnet_50_to_onnx.py  
+python torch_to_onnx.py --model='resnet50'
 ```
 
 This will also export a `csv` file containing information about the input/output/weight sizes of each layer.   
@@ -31,4 +31,4 @@ Where `DEVICE-KEY` is a name you have assigned to the target device; you can the
 python onnx_to_tvm.py --model='resnet50' --layer_info='resnet/layer_info.csv' --layer='resnet/resnet50_0.onnx' --device_key='hikey' --opencl --n_trials=1000
 ```
 
-To use an Nvidia GPU, omit the `--opencl` flag. 
+To use an Nvidia GPU, omit the `--opencl` flag.
