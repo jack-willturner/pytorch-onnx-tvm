@@ -5,3 +5,4 @@ logs/
 .ipynb_checkpoints/
 .pkl_momoize_py3
 vgg/*.onnx
+.pkl_memoize_py3
