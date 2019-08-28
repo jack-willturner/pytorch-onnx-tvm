@@ -19,10 +19,14 @@ parser.add_argument('--opencl', action='store_true')
 parser.add_argument('--cpu', action='store_true')
 parser.add_argument('--n_trials', default=1000, type=int)
 parser.add_argument('--drop_until', default=0, type=int)
+parser.add_argument('--benchmark', action='store_true')
+parser.add_argument('--log_file', default='', type=str)
 args = parser.parse_args()
 
 if not args.opencl:
     os.environ["CUDA_VISIBLE_DEVICES"]='1'
+
+dtype = 'float32'
 
 def get_network(filename, input_shape):
     onnx_model = onnx.load(filename)
@@ -42,6 +46,7 @@ else:
 
     else:
         target = tvm.target.cuda()
+        target_host = 'llvm'
         ctx    = tvm.gpu()
 
 
@@ -86,7 +91,6 @@ def tune_and_evaluate():
 
         #### TUNING OPTION ####
         log_file = "logs/%s.log" % net_fname
-        dtype = 'float32'
 
         tuning_opt = {
             'log_filename': log_file,
@@ -96,7 +100,7 @@ def tune_and_evaluate():
                 builder=autotvm.LocalBuilder(timeout=10),
                 runner=autotvm.RPCRunner(
                     args.device_key,
-                    '0.0.0.0', 9090,
+                    '0.0.0.0', 9190,
                     number=20, repeat=3, timeout=4, min_repeat_ms=150)
             ),
         }
@@ -117,40 +121,56 @@ def tune_and_evaluate():
         print("\tTuning...")
         tune_tasks(tasks, **tuning_opt)
 
-        # compile kernels with history best records
-        with autotvm.apply_history_best(log_file):
-            print("\tCompile...")
-            with relay.build_config(opt_level=3):
-                graph, lib, params = relay.build_module.build(
-                    net, target=target, target_host=target_host, params=params)
 
-            # export library
-            tmp      = tempdir()
-            filename = "net.tar"
-            lib.export_library(tmp.relpath(filename))
+def benchmark(log_file):
+    print(args.layer)
+    df = pd.read_csv(args.layer_info)
+    df = df[df['filename']==args.layer]
 
+    filenames = df.filename
+    in_c  = int(df.loc[df.filename==args.layer, 'in_channels'])
+    in_x  = int(df.loc[df.filename==args.layer, 'input_spatial_x'])
+    out_c = int(df.loc[df.filename==args.layer, 'out_channels'])
 
-             # upload module to device
-        print("Upload...")
-        remote = autotvm.measure.request_remote(args.device_key, '0.0.0.0', 9090,
-                                                timeout=10000)
-        remote.upload(tmp.relpath(filename))
-        rlib = remote.load_module(filename)
+    input_shape = (1,in_c,in_x,in_x)
 
-        # upload parameters to device
-        ctx = remote.context(str(target), 0)
-        module = runtime.create(graph, rlib, ctx)
-        data_tvm = tvm.nd.array((np.random.uniform(size=input_shape)).astype(dtype))
-        module.set_input('0', data_tvm)
-        module.set_input(**params)
+    net, params = get_network(args.layer, input_shape)
 
-        # evaluate
-        print("Evaluate inference time cost...")
-        ftimer = module.module.time_evaluator("run", ctx, number=1, repeat=30)
-        prof_res = np.array(ftimer().results) * 1000  # convert to millisecond
-        print("Mean inference time (std dev): %.8f ms (%.2f ms)" %
-              (np.mean(prof_res), np.std(prof_res)))
+    # compile kernels with history best records
+    with autotvm.apply_history_best(log_file):
+        print("\tCompile...")
+        with relay.build_config(opt_level=3):
+            graph, lib, params = relay.build_module.build(
+                net, target=target, target_host=target_host, params=params)
+
+        # export library
+        tmp      = tempdir()
+        filename = "net.tar"
+        lib.export_library(tmp.relpath(filename))
 
 
+         # upload module to device
+    print("\tUpload...")
+    remote = autotvm.measure.request_remote(args.device_key, '0.0.0.0', 9190,
+                                            timeout=10000)
+    remote.upload(tmp.relpath(filename))
+    rlib = remote.load_module(filename)
 
-tune_and_evaluate()
+    # upload parameters to device
+    ctx = remote.context(str(target), 0)
+    module = runtime.create(graph, rlib, ctx)
+    data_tvm = tvm.nd.array((np.random.uniform(size=input_shape)).astype(dtype))
+    module.set_input('0', data_tvm)
+    module.set_input(**params)
+
+    # evaluate
+    print("\tEvaluate inference time cost...")
+    ftimer = module.module.time_evaluator("run", ctx, number=1, repeat=30)
+    prof_res = np.array(ftimer().results) * 1000  # convert to millisecond
+    print("\tMean inference time (std dev): %.8f ms (%.2f ms)" %
+          (np.mean(prof_res), np.std(prof_res)))
+
+if args.benchmark:
+    benchmark(args.log_file)
+else:
+    tune_and_evaluate()
