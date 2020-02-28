@@ -1,8 +1,9 @@
-resnet/*.onnx
 __pycache__/
 models/__pycache__/
+
 logs/
 .ipynb_checkpoints/
 .pkl_momoize_py3
-vgg/*.onnx
-.pkl_memoize_py3
+
+models/vgg16/*.onnx
+models/resnet18/*.onnx

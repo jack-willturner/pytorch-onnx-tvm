@@ -7,18 +7,21 @@ from funcs import *
 import argparse
 
 parser = argparse.ArgumentParser(description='AutoTVM from ONNX checkpoints')
-parser.add_argument('--model', default='resnet50', type=str)
+parser.add_argument('--model', default='vgg16', type=str)
 args = parser.parse_args()
 
+models = {
+    'resnet18' : resnet18(),
+    'vgg16' : vgg16(),
+#    'wide_resnet50_2' : models.wide_resnet50_2(),
+#    'mnasnet' : models.mnasnet1_0(),
+}
+
 dummy_input = torch.randn(1,3,224,224)
-if args.model == 'resnet50':
-    net = resnet50()
-    base_file = 'resnet/resnet50'
-    save_folder = 'resnet'
-elif args.model == 'vgg16':
-    net = vgg16()
-    base_file = 'vgg/vgg16'
-    save_folder = 'vgg'
+
+net = models[args.model]
+base_file   = 'models/'+args.model+'/'+args.model
+save_folder = 'models/'+args.model
 
 _ = net(dummy_input)
 torch.onnx.export(net, dummy_input, str(base_file + '.onnx'))
@@ -42,6 +45,7 @@ for block in net.children():
             dummy_input = block(dummy_input)
 
     elif isinstance(block, nn.Sequential):
+
         for layer in block:
             fname = base_file + '_' + str(i) + '.onnx'
             dummy_input = torch.randn(1,layer.conv1.in_channels,layer.conv1_input_size[2],layer.conv1_input_size[3])
