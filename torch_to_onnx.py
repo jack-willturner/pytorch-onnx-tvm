@@ -3,7 +3,7 @@ import torch.onnx
 import torch.nn as nn
 from models import *
 import pandas as pd
-from count_ops import *
+from funcs import *
 import argparse
 
 parser = argparse.ArgumentParser(description='AutoTVM from ONNX checkpoints')
