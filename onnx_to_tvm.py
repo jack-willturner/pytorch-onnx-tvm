@@ -31,7 +31,7 @@ dtype = 'float32'
 def get_network(filename, input_shape):
     onnx_model = onnx.load(filename)
     data = np.random.uniform(-1, 1, size=input_shape).astype("float32")
-    shape_dict = {'0' : data.shape}
+    shape_dict = {'input' : data.shape}
     sym, params = relay.frontend.from_onnx(onnx_model, shape_dict)
 
     return sym, params
@@ -90,7 +90,7 @@ def tune_and_evaluate():
         print('Tuning: ', net_fname)
 
         #### TUNING OPTION ####
-        log_file = "logs/%s.log" % net_fname
+        log_file = "models/%s/logs/%s.log" % (args.model, args.log_file)
 
         tuning_opt = {
             'log_filename': log_file,
